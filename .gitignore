@@ -3,9 +3,7 @@ visualwebarena/results/*
 *__pycache__*
 visualwebarena/venv/*
 webarena_prompt_injections/venv/*
-claude-35-computer-use-demo/.venv/*
-claude-37-computer-use-demo/.venv/*
 .vscode/*
-claude-35-computer-use-demo/claude_computer_use_logs/*
-claude-37-computer-use-demo/claude_computer_use_logs/*
 .idea/*
+logs/
+wasp_images/
