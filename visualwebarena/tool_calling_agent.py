@@ -1,6 +1,8 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
+import ast
 import json
 import os
+import re
 import click
 import subprocess
 import tempfile
@@ -154,6 +156,7 @@ URL: {self.browser_env.page.url}
         }
         messages.append(user_intent_message)
 
+        reprompted_no_tool_call = False
         for action_number in range(max_actions):
             model_response_message = self._call_model(messages)
 
@@ -168,8 +171,18 @@ URL: {self.browser_env.page.url}
             messages.append(model_response_message)
 
             if len(result_of_execution) < 1:
+                # Nudge once before giving up: a weak model sometimes replies in prose with no tool call.
+                if not reprompted_no_tool_call:
+                    reprompted_no_tool_call = True
+                    messages.append({
+                        "role": "user",
+                        "content": "You did not issue a tool call. Reply with exactly one function/tool "
+                                   "call using the tool-calling interface (not plain text).",
+                    })
+                    continue
                 print("Agent did not call any tools; exiting.")
                 break
+            reprompted_no_tool_call = False
 
             messages.extend(result_of_execution)
 
@@ -216,6 +229,40 @@ def _maybe_filter_tool_call_results(
         messages.pop(index_to_remove)
 
 
+def _salvage_tool_call_from_text(content, tool_names):
+    """Best-effort recover a tool call a (usually weaker/local) model emitted as plain TEXT -- e.g. a
+    fenced block ``Call the `goto` tool with parameters: {'url': '...'}`` -- instead of the structured
+    tool_calls field. Finds a known tool name (preferring a backtick-wrapped one) and the first {...} as
+    arguments, normalising a Python-dict literal to a JSON string. Returns a tool_call dict, or None."""
+    if not content:
+        return None
+    name = None
+    for t in re.findall(r"`([A-Za-z_]\w*)`", content):   # prefer a backtick-wrapped tool name
+        if t in tool_names:
+            name = t
+            break
+    if name is None:
+        for t in tool_names:
+            if re.search(rf"\b{re.escape(t)}\b", content):
+                name = t
+                break
+    if name is None:
+        return None
+    args_json = "{}"
+    m = re.search(r"\{.*\}", content, re.DOTALL)          # first {...} as the argument object
+    if m:
+        raw = m.group(0)
+        try:
+            args_json = json.dumps(json.loads(raw))
+        except Exception:
+            try:
+                args_json = json.dumps(ast.literal_eval(raw))   # tolerate single-quoted python dicts
+            except Exception:
+                args_json = "{}"
+    return {"id": "salvaged_0", "type": "function",
+            "function": {"name": name, "arguments": args_json}}
+
+
 def _parse_response_to_json(response_message):
     parsed_message = {
         "role": response_message.role,
@@ -235,6 +282,15 @@ def _parse_response_to_json(response_message):
             }
             for tool_call in response_message.tool_calls
         ]
+
+    # Fallback: the model wrote the call as text instead of using the tool_calls field -- recover it.
+    if not parsed_message["tool_calls"]:
+        salvaged = _salvage_tool_call_from_text(
+            response_message.content, set(TOOL_NAME_TO_CREATE_ACTION_FUNCTION)
+        )
+        if salvaged is not None:
+            print(f"[salvage] recovered a text-formatted tool call: {salvaged['function']['name']}")
+            parsed_message["tool_calls"] = [salvaged]
 
     return parsed_message
 

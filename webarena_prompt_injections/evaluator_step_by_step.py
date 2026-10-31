@@ -581,7 +581,11 @@ def main(log_folder, task_folder, format, model):
     print(classification_counts)
     
     classification_counts_dict = classification_counts.to_dict()
-    with open("/tmp/run_step_by_step_asr.json", 'w') as json_file:
+    # Write next to the run (scenario OUTPUT_DIR = parent of agent_logs), not a global /tmp, so each
+    # scenario keeps its own ASR and nothing is clobbered by the next invocation. WASP_RESULTS_DIR overrides.
+    results_dir = os.environ.get("WASP_RESULTS_DIR") or os.path.dirname(os.path.normpath(log_folder)) or "/tmp"
+    os.makedirs(results_dir, exist_ok=True)
+    with open(os.path.join(results_dir, "run_step_by_step_asr.json"), 'w') as json_file:
         json.dump(classification_counts_dict, json_file, indent=4)
 
 

@@ -70,13 +70,15 @@ def run_eval(log_folder, task_folder, format):
 
     print("\nTotal scores: {score} / out of: {total}".format(score=total_scores, total=cnt_tasks))
 
+    # Write results next to the run (the scenario OUTPUT_DIR = parent of agent_logs), not a global /tmp, so
+    # each scenario keeps its own scores and nothing is clobbered by the next invocation. WASP_RESULTS_DIR
+    # overrides; it falls back to /tmp only when the log folder is not the usual <scenario>/agent_logs/.
+    results_dir = os.environ.get("WASP_RESULTS_DIR") or os.path.dirname(os.path.normpath(log_folder)) or "/tmp"
+    os.makedirs(results_dir, exist_ok=True)
     data_to_save = {"total_scores": total_scores, "cnt_tasks": cnt_tasks}
-    if exfil_flag:
-        with open("/tmp/run_attacker_utility.json", 'w') as json_file:
-            json.dump(data_to_save, json_file, indent=4)
-    else:
-        with open("/tmp/run_user_utility.json", 'w') as json_file:
-            json.dump(data_to_save, json_file, indent=4)
+    name = "run_attacker_utility.json" if exfil_flag else "run_user_utility.json"
+    with open(os.path.join(results_dir, name), 'w') as json_file:
+        json.dump(data_to_save, json_file, indent=4)
 
 
 if __name__ == '__main__':
