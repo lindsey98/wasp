@@ -2,7 +2,7 @@
 import re
 import os
 from playwright.sync_api import TimeoutError, expect
-from .base_environment_editor import BaseWebArenaEditor, WebArenaEditorException
+from .base_environment_editor import BaseWebArenaEditor, WebArenaEditorException, LOG_DIR
 from urllib.parse import urlparse, urlunparse
 
 
@@ -29,15 +29,15 @@ class GitlabEditor(BaseWebArenaEditor):
         Returns:
             bool: True if login was successful, False otherwise.
         """
-        self.page.goto(f"{self.gitlab_domain}/users/sign_in", wait_until="networkidle")
+        self.page.goto(f"{self.gitlab_domain}/users/sign_in", wait_until="load")
 
         self.page.set_viewport_size({"width": 1280, "height": 1500})
 
         try:
             self.page.wait_for_selector("input#user_login", timeout=10000)
         except:
-            screenshot_path = "/tmp/debug_gitlabeditor_login_no_user_field.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_login_no_user_field.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to login. Did not find user input field {self.page.url}. Screenshot at {screenshot_path}"
             )
@@ -49,8 +49,8 @@ class GitlabEditor(BaseWebArenaEditor):
             with self.page.expect_navigation():
                 self.page.click('button[type="submit"]')
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_login.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_login.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to login. Screenshot at {screenshot_path}"
             )
@@ -65,8 +65,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 print("Unknown exception while responding to the survey after login")
 
         if self.page.url.strip("/") != self.gitlab_domain:
-            screenshot_path = "/tmp/debug_gitlabeditor_login.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_login.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to login. Actually navigated to {self.page.url}. Username: {username} Password {password}. Screenshot at {screenshot_path}"
             )
@@ -101,7 +101,16 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_action = (
             f"{self.gitlab_domain}/{project_owner}/{project_name}/-/issues/new"
         )
-        self.page.goto(url_of_action, wait_until="networkidle")
+        self.page.goto(url_of_action, wait_until="load")
+
+        # DEBUG: dump the issue page so a missing #issue_title can be diagnosed (remove once working).
+        try:
+            self.page.wait_for_timeout(1500)
+            self._safe_screenshot(f"{LOG_DIR}/debug_issue_new.png")
+            with open(f"{LOG_DIR}/debug_issue_new.html", "w") as _f:
+                _f.write(self.page.content())
+        except Exception:
+            pass
 
         self.page.fill(
             "#issue_title",
@@ -113,8 +122,8 @@ class GitlabEditor(BaseWebArenaEditor):
             with self.page.expect_navigation():
                 self.page.click('button:has-text("Create issue")')
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_login.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_login.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to create issue at {url_of_action}. Screenshot at {screenshot_path}"
             )
@@ -125,9 +134,9 @@ class GitlabEditor(BaseWebArenaEditor):
             return self.page.url
         else:
             screenshot_path = (
-                "/tmp/debug_gitlabeditor_issue_creation_with_title_and_text.png"
+                f"{LOG_DIR}/debug_gitlabeditor_issue_creation_with_title_and_text.png"
             )
-            self.page.screenshot(path=screenshot_path)
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Issue creation likely failed. Did not end up at an expected URL; instead at {self.page.url}. Screenshot for debugging at {screenshot_path}"
             )
@@ -136,7 +145,7 @@ class GitlabEditor(BaseWebArenaEditor):
         self,
         url_of_issue: str,
     ):
-        self.page.goto(url_of_issue, wait_until="networkidle")
+        self.page.goto(url_of_issue, wait_until="load")
 
         self.page.get_by_role("button", name="Issue actions").click()
 
@@ -158,8 +167,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 state="visible",
             )
         except Exception:
-            screenshot_path = "/tmp/debug_delete_issue.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_delete_issue.png"
+            self._safe_screenshot(screenshot_path)
             print(f"Failed to delete issue at {url_of_issue}. Screenshot at {screenshot_path}, skipping...")
 
     def delete_all_issues_in_project(
@@ -168,7 +177,7 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_issues_page = (
             f"{self.gitlab_domain}/{project_owner}/{project_name}/-/issues"
         )
-        self.page.goto(url_of_issues_page, wait_until="networkidle")
+        self.page.goto(url_of_issues_page, wait_until="load")
 
         issue_selector = "a[data-qa-selector='issuable_title_link']"
 
@@ -189,7 +198,7 @@ class GitlabEditor(BaseWebArenaEditor):
             self.delete_issue_given_url(updated_url)
 
             if self.page.url != url_of_issues_page:
-                self.page.goto(url_of_issues_page, wait_until="networkidle")
+                self.page.goto(url_of_issues_page, wait_until="load")
 
             try:
                 self.page.wait_for_selector(issue_selector, timeout=max_timeout)
@@ -216,7 +225,7 @@ class GitlabEditor(BaseWebArenaEditor):
         # Navigate to the group creation page
         self.page.goto(
             f"{self.gitlab_domain}/groups/new#create-group-pane",
-            wait_until="networkidle",
+            wait_until="load",
         )
 
         # Wait for the group name field to be visible before filling
@@ -246,8 +255,8 @@ class GitlabEditor(BaseWebArenaEditor):
             with self.page.expect_navigation():
                 self.page.get_by_role("button", name="Create group").click()
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_group_creation.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_group_creation.png"
+            self._safe_screenshot(screenshot_path)
             shared_message = f"Failed to create group '{group_name}' and ended up at {self.page.url}. Screenshot at {screenshot_path}"
             # If we are here, we did not up at the expected project page
             error_container = self.page.locator("div#error_explanation")
@@ -307,7 +316,7 @@ class GitlabEditor(BaseWebArenaEditor):
         """
         # Navigate to the project creation page
         self.page.goto(
-            f"{self.gitlab_domain}/projects/new#blank_project", wait_until="networkidle"
+            f"{self.gitlab_domain}/projects/new#blank_project", wait_until="load"
         )
 
         # Fill in the project name
@@ -378,8 +387,8 @@ class GitlabEditor(BaseWebArenaEditor):
                     raise WebArenaEditorException("Failed to end up at the expected URL")
 
         except (TimeoutError, WebArenaEditorException):
-            screenshot_path = "/tmp/debug_gitlabeditor_project_creation.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_project_creation.png"
+            self._safe_screenshot(screenshot_path)
             shared_message = f"Failed to create project '{project_name}' under '{namespace_name}' and ended up at {self.page.url}. Screenshot at {screenshot_path}"
 
             # If we are here, we did not up at the expected project page
@@ -421,7 +430,7 @@ class GitlabEditor(BaseWebArenaEditor):
             email (str): The user's email address.
             password (str): The desired password.
         """
-        self.page.goto(f"{self.gitlab_domain}/users/sign_up", wait_until="networkidle")
+        self.page.goto(f"{self.gitlab_domain}/users/sign_up", wait_until="load")
 
         # Fill in the first name
         self.page.fill("#new_user_first_name", first_name)
@@ -439,8 +448,11 @@ class GitlabEditor(BaseWebArenaEditor):
         self.page.fill("#new_user_password", password)
 
         def _shared_error_handling():
-            screenshot_path = "/tmp/debug_gitlabeditor_user_creation.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_user_creation.png"
+            try:
+                self._safe_screenshot(screenshot_path)
+            except Exception:
+                pass  # debug screenshot is best-effort; headless capture can fail
             return f"Failed to register user '{username}' with first name {first_name} last name {last_name} with password '{password}' and email {email} and ended up at {self.page.url}. Screenshot at {screenshot_path}"
 
         try:
@@ -470,7 +482,17 @@ class GitlabEditor(BaseWebArenaEditor):
                     f"{shared_error_message} with the following errors: {error_message}"
                 )
             else:
-                # If there's no known error message, raise a generic exception
+                # Some GitLab versions don't render div#error_explanation; fall back to the page text so
+                # callers can still detect a known error. In particular make_attacker_account swallows
+                # "Username has already been taken" to stay idempotent across re-runs.
+                try:
+                    body_text = self.page.inner_text("body")
+                except Exception:
+                    body_text = ""
+                if "already been taken" in body_text:
+                    raise WebArenaEditorException(
+                        f"{shared_error_message} with the following errors: Username has already been taken"
+                    )
                 raise WebArenaEditorException(
                     f"{shared_error_message}  and did not end up at the welcome screen but had no error messages found in the format we were expecting."
                 )
@@ -491,7 +513,7 @@ class GitlabEditor(BaseWebArenaEditor):
 
         self.page.goto(
             f"{self.gitlab_domain}/groups/{group_to_add_to}/-/group_members",
-            wait_until="networkidle",
+            wait_until="load",
         )
 
         def _get_exisiting_members():
@@ -626,7 +648,7 @@ class GitlabEditor(BaseWebArenaEditor):
 
     def delete_account(self, password: str):
         self.page.goto(
-            f"{self.gitlab_domain}/-/profile/account", wait_until="networkidle"
+            f"{self.gitlab_domain}/-/profile/account", wait_until="load"
         )
 
         delete_account_button_locator = 'button:has-text("Delete account")'
@@ -661,8 +683,8 @@ class GitlabEditor(BaseWebArenaEditor):
                     '[data-qa-selector="confirm_delete_account_button"]'
                 ).click()
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_account.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_account.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to delete account due to timeout, used password {password}. Screenshot at {screenshot_path}"
             )
@@ -676,8 +698,8 @@ class GitlabEditor(BaseWebArenaEditor):
                     f"Failed to delete account due to error {inner_text} and ended up at {self.page.url}, attempted with password {password}"
                 )
             else:
-                screenshot_path = "/tmp/debug_gitlabeditor_delete_account.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_account.png"
+                self._safe_screenshot(screenshot_path)
                 raise WebArenaEditorException(
                     f"Failed to delete account due to unknown error and ended up at {self.page.url}, attempted with password {password}"
                 )
@@ -686,8 +708,8 @@ class GitlabEditor(BaseWebArenaEditor):
             self.page.locator("div.gl-alert-body").text_content().strip()
         )
         if confirmation_page_text != "Account scheduled for removal.":
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_account.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_account.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Did not receive confirmation account was deleted. Screenshot at {screenshot_path}"
             )
@@ -715,7 +737,7 @@ class GitlabEditor(BaseWebArenaEditor):
     ):
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         try:
             self._maybe_raise_page_not_found(url_of_action)
@@ -751,8 +773,8 @@ class GitlabEditor(BaseWebArenaEditor):
                     f'button:has-text("{deletion_confirmation_button_text}")'
                 ).click()
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_project_or_group.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_project_or_group.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to delete project or group {confirmation_phrase} due to timeout. Screenshot at {screenshot_path}"
             )
@@ -764,8 +786,8 @@ class GitlabEditor(BaseWebArenaEditor):
 
             expected_confirmation_text = f"is in the process of being deleted."
             if not confirmation_page_text.endswith(expected_confirmation_text):
-                screenshot_path = "/tmp/debug_gitlabeditor_delete_project_or_group.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_project_or_group.png"
+                self._safe_screenshot(screenshot_path)
                 raise WebArenaEditorException(
                     f"Failed to delete project or group {confirmation_phrase}; expected confirmation text {expected_confirmation_text}, got {confirmation_page_text}. Screenshot at {screenshot_path}"
                 )
@@ -795,8 +817,8 @@ class GitlabEditor(BaseWebArenaEditor):
             with self.page.expect_navigation():
                 self.page.click(button_selector)
         except TimeoutError:
-            screenshot_path = f"/tmp/debug_gitlabeditor_{action_name}.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_{action_name}.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"{action_name} fialed. Screenshot at {screenshot_path}"
             )
@@ -821,7 +843,7 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
 
         self._maybe_raise_page_not_found(url_of_action)
@@ -849,7 +871,7 @@ class GitlabEditor(BaseWebArenaEditor):
 
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
 
         self._maybe_raise_page_not_found(url_of_action)
@@ -875,7 +897,7 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_action = f"{self.gitlab_domain}/{namespace_name}/{project_name}/-/merge_requests/new?merge_request%5Bsource_branch%5D={branch_name}"
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         self._maybe_raise_page_not_found(url_of_action)
 
@@ -910,8 +932,8 @@ class GitlabEditor(BaseWebArenaEditor):
         if match:
             return match.group(1)
         else:
-            screenshot_path = "/tmp/debug_gitlabeditor_create_merge_request.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_create_merge_request.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Likely failed to create merge request. Did not end up at an expected URL; instead at {self.page.url}. Screenshot for debugging at {screenshot_path}"
             )
@@ -922,7 +944,7 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_action = f"{self.gitlab_domain}/{namespace_name}/{project_name}/-/merge_requests/{merge_request_number}"
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         self._maybe_raise_page_not_found(url_of_action)
 
@@ -935,15 +957,15 @@ class GitlabEditor(BaseWebArenaEditor):
                 "Closed"
             )
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_close_merge_request.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_close_merge_request.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to clsoe merge request. Screenshot at {screenshot_path}"
             )
 
     def set_username_if_different(self, desired_username: str):
         self.page.goto(
-            f"{self.gitlab_domain}/-/profile/account", wait_until="networkidle"
+            f"{self.gitlab_domain}/-/profile/account", wait_until="load"
         )
 
         username_field_selector = "#username-change-input"
@@ -971,8 +993,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 if success_modal.count() < 1:
                     raise ValueError()
             except:
-                screenshot_path = "/tmp/debug_gitlabeditor_change_username.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_change_username.png"
+                self._safe_screenshot(screenshot_path)
                 raise WebArenaEditorException(
                     f"Failed to change username at {self.page.url}. Screenshot at {screenshot_path}"
                 )
@@ -988,7 +1010,7 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_action = f"{self.gitlab_domain}/{namespace_name}/{project_name}/-/blob/{branch_name}/{file_name}"
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
 
         trigger_replace_file_button_selector = '[data-testid="replace"]'
@@ -1004,9 +1026,11 @@ class GitlabEditor(BaseWebArenaEditor):
         self._wait_for_selector(replace_file_button_selector)
         self.page.click(replace_file_button_selector)
 
+        # The success toast is present in the DOM but auto-dismisses/stays hidden, so wait for it to be
+        # ATTACHED (present) rather than visible -- its presence already means the commit succeeded.
         self.page.wait_for_selector(
             "div.gl-alert-body:has-text('Your changes have been successfully committed')",
-            state="visible",
+            state="attached",
         )
 
     def delete_branch(self, namespace_name: str, project_name: str, branch_name: str):
@@ -1015,7 +1039,7 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
 
         # Define a selector for the branch item
@@ -1027,8 +1051,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 f"{branch_selector} button.js-delete-branch-button"
             ).click()
         else:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_branch_notfound.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_branch_notfound.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Branch '{branch_name}' not found in active branches at {self.page.url}."
             )
@@ -1043,8 +1067,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 "Branch was deleted"
             )
         except TimeoutError:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_branch.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_branch.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to delete branch {branch_name}. Screenshot at {screenshot_path}"
             )
@@ -1055,7 +1079,7 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         btn_delete_selector = "#js-deploy-keys-settings > div.settings-content > div > div.deploy-keys-panel.table-holder > div.gl-responsive-table-row.deploy-key > div.table-section.section-15.table-button-footer.deploy-key-actions > div > button"
         confirm_delete_button = "#confirm-remove-deploy-key___BV_modal_footer_ > button.btn.js-modal-action-primary.btn-danger.btn-md.gl-button"
@@ -1070,8 +1094,8 @@ class GitlabEditor(BaseWebArenaEditor):
             self.page.click(confirm_delete_button)
             self.page.wait_for_timeout(1000)  # Wait for 1 second
         except Exception as e:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_deploykeys.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_deploykeys.png"
+            self._safe_screenshot(screenshot_path)
             print(f"[Warning] No Delete button or other error occurred: {e}. "
                   f"Maybe deploy key is already deleted or do not exist. "
                   f"Screenshot can be found at: {screenshot_path}")
@@ -1082,7 +1106,7 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         expand_selector = "#js-deploy-tokens > div.settings-header > button"
         btn_delete_selector = "#js-deploy-tokens > div.settings-content > div.table-responsive.deploy-tokens > table > tbody > tr > td:nth-child(6) > div > button"
@@ -1099,8 +1123,8 @@ class GitlabEditor(BaseWebArenaEditor):
             self.page.click(confirm_delete_button)
             self.page.wait_for_timeout(1000)  # Wait for 1 second
         except Exception as e:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_deploytokens.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_deploytokens.png"
+            self._safe_screenshot(screenshot_path)
             print(f"[Warning] No Delete button or other error occurred: {e}. "
                   f"Maybe deploy token is already deleted or do not exist. "
                   f"Screenshot can be found at: {screenshot_path}")
@@ -1111,7 +1135,7 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         # btn_delete_selector = "#webhooks-index > div.gl-card-body.gl-py-0 > ul > li > div > div.col-md-4.col-lg-5.text-right-md.gl-mt-2 > a"
         btn_delete_selector = "a >> text=Delete"
@@ -1128,8 +1152,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 self.page.click(confirm_delete_button)
                 self.page.wait_for_timeout(1000)  # Wait for 1 second
             except Exception as e:
-                screenshot_path = "/tmp/debug_gitlabeditor_delete_webhook.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_webhook.png"
+                self._safe_screenshot(screenshot_path)
                 print(f"[Warning] No Delete button or other error occurred: {e}. "
                       f"Maybe webhook is already deleted or do not exist. "
                       f"Screenshot can be found at: {screenshot_path}")
@@ -1139,7 +1163,7 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_action = (
             f"{self.gitlab_domain}/-/profile/keys"
         )
-        self.page.goto(url_of_action, wait_until="networkidle")
+        self.page.goto(url_of_action, wait_until="load")
         btn_delete_selector = "#content-body > div.row.gl-mt-3.js-search-settings-section > div.col-lg-8 > div.gl-mb-3 > ul > li > div > span > div > div > button"
         confirm_delete_button = "#confirm-modal-1___BV_modal_footer_ > button.btn.btn-danger"
         try:
@@ -1153,8 +1177,8 @@ class GitlabEditor(BaseWebArenaEditor):
             self.page.click(confirm_delete_button)
             self.page.wait_for_timeout(1000)  # Wait for 1 second
         except Exception as e:
-            screenshot_path = "/tmp/debug_gitlabeditor_delete_sshkeys.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_sshkeys.png"
+            self._safe_screenshot(screenshot_path)
             print(f"[Warning] No Delete button or other error occurred: {e}. "
                   f"Maybe ssh key is already deleted or do not exist. "
                   f"Screenshot can be found at: {screenshot_path}")
@@ -1165,7 +1189,7 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         self.page.goto(
             url_of_action,
-            wait_until="networkidle",
+            wait_until="load",
         )
         btn_delete_selector = "a[aria-label='Revoke']"
         confirm_delete_button = "#confirmationModal___BV_modal_footer_ > button.btn.js-modal-action-primary.btn-danger.btn-md.gl-button"
@@ -1181,8 +1205,8 @@ class GitlabEditor(BaseWebArenaEditor):
                 self.page.click(confirm_delete_button)
                 self.page.wait_for_timeout(1000)  # Wait for 1 second
             except Exception as e:
-                screenshot_path = "/tmp/debug_gitlabeditor_delete_access_token.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_delete_access_token.png"
+                self._safe_screenshot(screenshot_path)
                 print(f"[Warning] No Delete button or other error occurred: {e}. "
                       f"Maybe access token is already deleted or do not exist. "
                       f"Screenshot can be found at: {screenshot_path}")
