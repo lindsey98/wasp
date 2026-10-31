@@ -19,6 +19,7 @@ class OutputFormat(str, Enum):
     CLAUDE = "claude"
     WEBARENA = "webarena"
     GPT_WEB_TOOLS = "gpt_web_tools"
+    AGENTPI = "agentpi"   # the GPT tool-calling web agent wrapped in the AgentPI online method
 
 
 class GitlabUserGoals:
@@ -221,4 +222,19 @@ python tool_calling_agent.py \\
 
 GPT_TOOL_WEB_AGENT_CLEANUP = """
 # deactivate
+"""
+
+# Same as the GPT tool-calling agent, but the runner is AgentPI's run_agentpi.py (the GPTWebAgent wrapped
+# in the online method). The guard-role models, --use-original, the contract file and the gate-trail dump
+# path all arrive through AGENTPI_* env vars set by the AgentPI pipeline, so the command line stays the
+# same shape as tool_calling_agent.py.
+AGENTPI_WEB_AGENT_SINGLE_RUN_TEMPLATE = """
+echo "Running AgentPI Web Agent Task ID {task_id}"
+
+python run_agentpi.py \\
+    --webarena_config_path "{webarena_config_path}" \\
+    --model "{model}" \\
+    --trace-log-filepath "{trace_log_filepath}" \\
+    --max_actions 20 \\
+    --max_observations_to_keep 3
 """

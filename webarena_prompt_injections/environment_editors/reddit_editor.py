@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 import os
 from playwright.sync_api import TimeoutError
-from .base_environment_editor import BaseWebArenaEditor, WebArenaEditorException
+from .base_environment_editor import BaseWebArenaEditor, WebArenaEditorException, LOG_DIR
 from urllib.parse import urlparse, urlunparse
 
 
@@ -18,15 +18,15 @@ class RedditEditor(BaseWebArenaEditor):
             username (str): The Reddit username.
             password (str): The Reddit password.
         """
-        self.page.goto(f"{self.reddit_domain}/login", wait_until="networkidle")
+        self.page.goto(f"{self.reddit_domain}/login", wait_until="load")
 
         self.page.set_viewport_size({"width": 1280, "height": 1500})
 
         try:
             self.page.wait_for_selector("input#login-username", timeout=10000)
         except:
-            screenshot_path = "/tmp/debug_redditeditor_login_no_user_field.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_login_no_user_field.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to login. Did not find user input field {self.page.url}. Screenshot at {screenshot_path}"
             )
@@ -38,15 +38,15 @@ class RedditEditor(BaseWebArenaEditor):
             with self.page.expect_navigation():
                 self.page.click('button[type="submit"]')
         except TimeoutError:
-            screenshot_path = "/tmp/debug_redditeditor_login.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_login.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to login. Screenshot at {screenshot_path}"
             )
 
         if self.page.url.strip("/") != self.reddit_domain:
-            screenshot_path = "/tmp/debug_redditeditor_login.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_login.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to login. Actually navigated to {self.page.url}. Username: {username} Password {password}. Screenshot at {screenshot_path}"
             )
@@ -59,7 +59,7 @@ class RedditEditor(BaseWebArenaEditor):
             password (str): The new reddit password.
         """
         start_url = f"{self.reddit_domain}/registration"
-        self.page.goto(start_url, wait_until="networkidle")
+        self.page.goto(start_url, wait_until="load")
 
         self.page.set_viewport_size({"width": 1280, "height": 720})
 
@@ -70,8 +70,8 @@ class RedditEditor(BaseWebArenaEditor):
                 # trying to login
                 self.login(username, password)
             except:
-                screenshot_path = "/tmp/debug_redditeditor_signup_no_user_field.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_redditeditor_signup_no_user_field.png"
+                self._safe_screenshot(screenshot_path)
                 raise WebArenaEditorException(
                     f"Failed to sign up. Did not find user input field {self.page.url}. Screenshot at {screenshot_path}"
                 )
@@ -84,8 +84,8 @@ class RedditEditor(BaseWebArenaEditor):
             with self.page.expect_navigation():
                 self.page.click('button:has-text("Sign up")')
         except TimeoutError:
-            screenshot_path = "/tmp/debug_redditeditor_signup.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_signup.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to sign up. Screenshot at {screenshot_path}"
             )
@@ -107,7 +107,7 @@ class RedditEditor(BaseWebArenaEditor):
         """
 
         # first check if a post with this title has already been created
-        self.page.goto(f"{self.reddit_domain}/user/{username}", wait_until="networkidle")
+        self.page.goto(f"{self.reddit_domain}/user/{username}", wait_until="load")
         if title_to_type_in in self.page.content():
             link = self.page.query_selector(f"a:has-text('{title_to_type_in}')")
             if link:
@@ -123,13 +123,13 @@ class RedditEditor(BaseWebArenaEditor):
         selector_forum = "#submission_forum"
         selector_of_submit_button = 'button:has-text("Create submission")'
 
-        self.page.goto(url_of_action, wait_until="networkidle")
+        self.page.goto(url_of_action, wait_until="load")
 
         try:
             self.page.wait_for_selector(selector_title_to_type_in, timeout=10000)
         except:
-            screenshot_path = "/tmp/debug_redditeditor_notitlefiled.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_notitlefiled.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"[WebArenaEditor] Form for creating a post not found. Screenshot at: {screenshot_path}"
             )
@@ -138,10 +138,10 @@ class RedditEditor(BaseWebArenaEditor):
         self.page.select_option(selector_forum, forum)
 
         self.page.click(selector_of_submit_button)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("load")
         if self.page.url.strip("/") == url_of_action:
-            screenshot_path = "/tmp/debug_redditeditor_creat_post.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_creat_post.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to create a post. Screenshot at {screenshot_path}"
             )
@@ -154,7 +154,7 @@ class RedditEditor(BaseWebArenaEditor):
         """
 
         # first check if a post with this title has already been created
-        self.page.goto(f"{self.reddit_domain}/user/{username}", wait_until="networkidle")
+        self.page.goto(f"{self.reddit_domain}/user/{username}", wait_until="load")
         if forum_name in self.page.content():
             link = self.page.query_selector(f"a:has-text('{forum_name}')")
             if link:
@@ -171,13 +171,13 @@ class RedditEditor(BaseWebArenaEditor):
         selector_sidebar = "#forum_sidebar"
         selector_of_submit_button = 'button:has-text("Create forum")'
 
-        self.page.goto(url_of_action, wait_until="networkidle")
+        self.page.goto(url_of_action, wait_until="load")
 
         try:
             self.page.wait_for_selector(selector_forum_name, timeout=10000)
         except:
-            screenshot_path = "/tmp/debug_redditeditor_noforumname.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_noforumname.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"[WebArenaEditor] Form for creating a forum not found. Screenshot at: {screenshot_path}"
             )
@@ -187,10 +187,10 @@ class RedditEditor(BaseWebArenaEditor):
         self.page.fill(selector_sidebar, forum_sidebar)
 
         self.page.click(selector_of_submit_button)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("load")
         if self.page.url.strip("/") == url_of_action:
-            screenshot_path = "/tmp/debug_redditeditor_create_forum.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_create_forum.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to create a post. Screenshot at {screenshot_path}"
             )
@@ -199,25 +199,25 @@ class RedditEditor(BaseWebArenaEditor):
     def block_user(self, username: str, username_to_block: str) -> str:
         """blocks username_to_block"""
         blocklist_url = f"{self.reddit_domain}/user/{username}/block_list"
-        self.page.goto(blocklist_url, wait_until="networkidle")
+        self.page.goto(blocklist_url, wait_until="load")
         if username_to_block in self.page.content():
             print(f"[Warning!] A user '{username_to_block}' is already in block list, skipping...")
             return self.page.url
         try:
-            self.page.goto(f"{self.reddit_domain}/user/{username_to_block}/block_user", wait_until="networkidle")
+            self.page.goto(f"{self.reddit_domain}/user/{username_to_block}/block_user", wait_until="load")
             selector_of_submit_button = 'button:has-text("Block")'
             self.page.click(selector_of_submit_button)
-            self.page.wait_for_load_state("networkidle")
+            self.page.wait_for_load_state("load")
         except:
-            screenshot_path = "/tmp/debug_redditeditor_blocklist_action.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_blocklist_action.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to block a add {username_to_block} into {username}'s blocklist. "
                 f"Make sure both usernames exist and login was performed! Screenshot at {screenshot_path}"
             )
         if self.page.url.strip("/") != blocklist_url:
-            screenshot_path = "/tmp/debug_redditeditor_blocklist.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_blocklist.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to block a add {username_to_block} into {username}'s blocklist. "
                 f"Make sure both usernames exist and login was performed! Screenshot at {screenshot_path}"
@@ -233,7 +233,7 @@ class RedditEditor(BaseWebArenaEditor):
             username: username whose posts should be deleted
         """
 
-        self.page.goto(f"{self.reddit_domain}/user/{username}", wait_until="networkidle")
+        self.page.goto(f"{self.reddit_domain}/user/{username}", wait_until="load")
 
         self.page.on("dialog", lambda dialog: dialog.accept())
 
@@ -263,7 +263,7 @@ class RedditEditor(BaseWebArenaEditor):
         """
 
         # first check if a post with this title has already been created
-        self.page.goto(f"{url}", wait_until="networkidle")
+        self.page.goto(f"{url}", wait_until="load")
 
         self.page.on("dialog", lambda dialog: dialog.accept())
 
@@ -287,7 +287,7 @@ class RedditEditor(BaseWebArenaEditor):
         """
 
         # first check if a post with this title has already been created
-        self.page.goto(f"{url}", wait_until="networkidle")
+        self.page.goto(f"{url}", wait_until="load")
 
         self.page.on("dialog", lambda dialog: dialog.accept())
 
@@ -316,7 +316,7 @@ class RedditEditor(BaseWebArenaEditor):
 
         # first check if a post with this title has already been created
         url_msgs = f"{self.reddit_domain}/messages"
-        self.page.goto(url_msgs, wait_until="networkidle")
+        self.page.goto(url_msgs, wait_until="load")
 
         links = self.page.query_selector_all('a[href*="messages/thread"]')
         links = [link.get_attribute('href') for link in links]
@@ -325,12 +325,12 @@ class RedditEditor(BaseWebArenaEditor):
             try:
                 href = f"{self.reddit_domain}{link}"
                 # print(f"Visiting: {href}")
-                self.page.goto(href, wait_until="networkidle")
+                self.page.goto(href, wait_until="load")
                 button = self.page.query_selector('button:has-text("Delete")')
                 button.click()
             except Exception as e:
-                screenshot_path = "/tmp/debug_redditeditor_deletemsg.png"
-                self.page.screenshot(path=screenshot_path)
+                screenshot_path = f"{LOG_DIR}/debug_redditeditor_deletemsg.png"
+                self._safe_screenshot(screenshot_path)
                 print(f"[Warning] Messages deleting failed: {e}. Screenshot at: {screenshot_path}")
 
         return self.page.url
@@ -349,23 +349,23 @@ class RedditEditor(BaseWebArenaEditor):
         selector_text_to_type_in = f"#reply_to_submission_{post_id}_comment"
         selector_of_submit_button = 'button:has-text("Post")'
 
-        self.page.goto(url_of_action, wait_until="networkidle")
+        self.page.goto(url_of_action, wait_until="load")
 
         try:
             self.page.wait_for_selector(selector_text_to_type_in, timeout=10000)
         except:
-            screenshot_path = "/tmp/debug_redditeditor_nocommentfield.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_nocommentfield.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"[WebArenaEditor] Form for commenting a post not found. Screenshot at: {screenshot_path}."
             )
         self.page.fill(selector_text_to_type_in, comment_text)
 
         self.page.click(selector_of_submit_button)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("load")
         if self.page.url.strip("/") == url_of_action:
-            screenshot_path = "/tmp/debug_redditeditor_comment_post.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_comment_post.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to comment on a post. Screenshot at {screenshot_path}"
             )
@@ -378,7 +378,7 @@ class RedditEditor(BaseWebArenaEditor):
             username (str): reddit username to send a msg.
             msg_content (str): main body of the message.
         """
-        self.page.goto(f"{self.reddit_domain}/messages", wait_until="networkidle")
+        self.page.goto(f"{self.reddit_domain}/messages", wait_until="load")
         if msg_content in self.page.content() and username_to_send in self.page.content():
             link = self.page.query_selector(f"a:has-text('{msg_content}')")
             if link:
@@ -390,22 +390,22 @@ class RedditEditor(BaseWebArenaEditor):
         selector_text_to_type_in = "#message_body"
         selector_of_submit_button = 'button:has-text("Send")'
 
-        self.page.goto(url_of_action, wait_until="networkidle")
+        self.page.goto(url_of_action, wait_until="load")
 
         try:
             self.page.wait_for_selector(selector_text_to_type_in, timeout=10000)
         except:
-            self.page.screenshot(path="/tmp/debug_edit_submission.png")
+            self._safe_screenshot(f"{LOG_DIR}/debug_edit_submission.png")
             raise WebArenaEditorException(
                 "[WebArenaEditor] Field to add the text not found. Taking a screenshot for debugging."
             )
         self.page.fill(selector_text_to_type_in, msg_content)
         self.page.click(selector_of_submit_button)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("load")
 
         if self.page.url.strip("/") == url_of_action:
-            screenshot_path = "/tmp/debug_redditeditor_creat_post.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_creat_post.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"Failed to send a msg. Screenshot at {screenshot_path}"
             )
@@ -415,7 +415,7 @@ class RedditEditor(BaseWebArenaEditor):
         """
         Resets password to be empty string
         """
-        self.page.goto(f"{self.reddit_domain}/user/{username}/account", wait_until="networkidle")
+        self.page.goto(f"{self.reddit_domain}/user/{username}/account", wait_until="load")
 
         selector_email = "#user_email"
         selector_of_submit_button = 'button:has-text("Save changes")'
@@ -424,10 +424,10 @@ class RedditEditor(BaseWebArenaEditor):
             self.page.wait_for_selector(selector_email, timeout=10000)
             self.page.fill(selector_email, "")
             self.page.click(selector_of_submit_button)
-            self.page.wait_for_load_state("networkidle")
+            self.page.wait_for_load_state("load")
         except:
-            screenshot_path = "/tmp/debug_redditeditor_resetemail.png"
-            self.page.screenshot(path=screenshot_path)
+            screenshot_path = f"{LOG_DIR}/debug_redditeditor_resetemail.png"
+            self._safe_screenshot(screenshot_path)
             raise WebArenaEditorException(
                 f"[WebArenaEditor] Form for resetting email error. Screenshot at: {screenshot_path}"
             )

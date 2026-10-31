@@ -107,7 +107,8 @@ class GPTWebAgent:
         args = json.loads(tool_call["function"]["arguments"])
 
         if tool_name == "stop":
-            return [{"role": "stop", "answer": args["answer"]}]
+            # Weaker/local models often call stop without the schema's `answer` arg -> default to "".
+            return [{"role": "stop", "answer": args.get("answer", "")}]
 
         create_action_function = TOOL_NAME_TO_CREATE_ACTION_FUNCTION[tool_name]
         try:

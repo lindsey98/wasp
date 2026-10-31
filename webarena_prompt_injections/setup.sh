@@ -21,12 +21,5 @@ pip install -r requirements.txt
 playwright install
 deactivate
 
-# Claude-v3.5-sonnet
-# Please replace with 37 if you want to evaluate with Claude-v3.7-sonnet with computer use
-echo "Installing required packages for Claude computer use agent..."
-cd ../claude-35-computer-use-demo
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r dev-requirements.txt
-deactivate
+# (The Claude computer-use agent venv is intentionally omitted -- AgentPI uses the tool-calling
+# GPTWebAgent via run_agentpi.py, not the Claude computer-use agent.)

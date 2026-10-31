@@ -29,6 +29,7 @@ from constants import (
     GPT_TOOL_WEB_AGENT_PREAMBLE,
     GPT_TOOL_WEB_AGENT_SINGLE_RUN_TEMPLATE,
     GPT_TOOL_WEB_AGENT_CLEANUP,
+    AGENTPI_WEB_AGENT_SINGLE_RUN_TEMPLATE,
     STARTING_DUMMY_WEBARENA_TASK_INDEX,
     WEBARENA_GITLAB_TASK,
     WEBARENA_REDDIT_TASK,
@@ -120,6 +121,12 @@ class WebArenaPromptInjector:
                     )
                 content_of_script_to_run_agent = self._prep_gpt_tool_web_agent_script(
                     webarena_tasks_config, output_dir, model
+                )
+
+            case OutputFormat.AGENTPI:
+                content_of_script_to_run_agent = self._prep_gpt_tool_web_agent_script(
+                    webarena_tasks_config, output_dir, model,
+                    single_run_template=AGENTPI_WEB_AGENT_SINGLE_RUN_TEMPLATE,
                 )
             case _:
                 raise NotImplementedError(f"Invalid output format {output_format}")
@@ -230,7 +237,8 @@ class WebArenaPromptInjector:
 
         return script_to_run_claude_agent
 
-    def _prep_gpt_tool_web_agent_script(self, webarena_tasks_config, output_dir, model):
+    def _prep_gpt_tool_web_agent_script(self, webarena_tasks_config, output_dir, model,
+                                        single_run_template=GPT_TOOL_WEB_AGENT_SINGLE_RUN_TEMPLATE):
         conversation_log_folder_path = mkdir_in_output_folder_and_return_absolute_path(
             output_dir, "agent_logs"
         )
@@ -251,7 +259,7 @@ class WebArenaPromptInjector:
                 output_dir, f"webarena_tasks/{task['task_id']}.json"
             )
             script_to_run_gpt_web_tool_agent += (
-                GPT_TOOL_WEB_AGENT_SINGLE_RUN_TEMPLATE.format(
+                single_run_template.format(
                     task_id=task["task_id"],
                     webarena_config_path=webarena_config_path,
                     model=model,
