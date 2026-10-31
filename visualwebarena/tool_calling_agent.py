@@ -3,6 +3,7 @@ import ast
 import json
 import os
 import re
+import uuid
 import click
 import subprocess
 import tempfile
@@ -65,7 +66,7 @@ class GPTWebAgent:
         try:
             completion = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=_api_safe_messages(messages),
                 tools=self.tools_definitions,
             )
             print(
@@ -196,6 +197,34 @@ URL: {self.browser_env.page.url}
             _maybe_filter_tool_call_results(messages, max_observations_to_keep)
 
 
+def _api_safe_messages(messages: list[dict]) -> list[dict]:
+    """A copy of `messages` valid for the OpenAI chat API. The observation window and text-salvage can leave
+    an assistant turn with an empty `tool_calls` array (rejected) or a `tool` message with no preceding
+    tool_call (rejected). So: keep an assistant's tool_calls only when each has a matching tool response,
+    keep a `tool` message only when its call survived, and never emit an empty tool_calls array or a
+    null-content text turn. The agent's own loop still reads the original `messages` unchanged."""
+    responded = {m.get("tool_call_id") for m in messages if m.get("role") == "tool"}
+    kept_ids: set = set()
+    out: list[dict] = []
+    for m in messages:
+        role = m.get("role")
+        if role == "assistant":
+            tcs = [tc for tc in (m.get("tool_calls") or []) if tc.get("id") in responded]
+            nm = {k: v for k, v in m.items() if k != "tool_calls"}
+            if tcs:
+                nm["tool_calls"] = tcs
+                kept_ids.update(tc.get("id") for tc in tcs)
+            elif nm.get("content") is None:
+                nm["content"] = ""   # an assistant turn needs content OR tool_calls, never neither
+            out.append(nm)
+        elif role == "tool":
+            if m.get("tool_call_id") in kept_ids:   # drop an orphaned observation whose call is gone
+                out.append(m)
+        else:
+            out.append(m)
+    return out
+
+
 def _get_tool_message_with_id_and_content(id, content):
     return {
         "role": "tool",
@@ -259,7 +288,7 @@ def _salvage_tool_call_from_text(content, tool_names):
                 args_json = json.dumps(ast.literal_eval(raw))   # tolerate single-quoted python dicts
             except Exception:
                 args_json = "{}"
-    return {"id": "salvaged_0", "type": "function",
+    return {"id": f"salvaged_{uuid.uuid4().hex[:8]}", "type": "function",
             "function": {"name": name, "arguments": args_json}}
 
 
