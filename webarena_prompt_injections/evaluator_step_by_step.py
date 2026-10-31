@@ -518,7 +518,7 @@ def classify_gpt_tool_use_logs(
     help="the name of the Azure-hosted model to use as the classifier",
 )
 def main(log_folder, task_folder, format, model):
-    if format == "gpt_web_tools":
+    if format in ("gpt_web_tools", "agentpi"):   # AgentPI's agent logs are the GPT tool-use format
         config = ModelInferenceConfig(
             model=model,
             system_prompt=SYSTEM_PROMPT_ACTION_ONLY,
@@ -556,7 +556,7 @@ def main(log_folder, task_folder, format, model):
                 print(f"WARNING: task_folder argument with value {task_folder} ignored "
                       f"as Claude conversations contain the legitimate user objective.")
             df = classify_claude_logs(model_inference_driver, log_folder=log_folder)
-        case OutputFormat.GPT_WEB_TOOLS:
+        case OutputFormat.GPT_WEB_TOOLS | OutputFormat.AGENTPI:
             if task_folder:
                 print(f"WARNING: task_folder argument with value {task_folder} ignored "
                       f"as GPT TOOL USE conversations contain the legitimate user objective.")

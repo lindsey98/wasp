@@ -106,7 +106,7 @@ bash prepare.sh
 python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT
 echo "Done evaluating attacker goals, above score is ASR!"
 # evaluate user task performance
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
 echo "Done evaluating user objectives!"
 deactivate
 # bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
