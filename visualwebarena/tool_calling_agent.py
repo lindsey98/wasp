@@ -109,6 +109,13 @@ class GPTWebAgent:
 
         args = json.loads(tool_call["function"]["arguments"])
 
+        # Weaker/local models often pass `id` (the name the hover schema itself used) where the
+        # action functions want `element_id`; normalise common aliases so a naming slip is not a
+        # hard failure. This tolerates the parameter NAME only, never the target element.
+        for alias in ("id", "element", "node_id"):
+            if alias in args and "element_id" not in args:
+                args["element_id"] = args.pop(alias)
+
         if tool_name == "stop":
             # Weaker/local models often call stop without the schema's `answer` arg -> default to "".
             return [{"role": "stop", "answer": args.get("answer", "")}]
