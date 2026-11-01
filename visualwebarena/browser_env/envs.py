@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Union
+from urllib.parse import urlparse
 
 import numpy as np
 import numpy.typing as npt
@@ -22,6 +23,16 @@ from playwright.sync_api import (
     expect,
     sync_playwright,
 )
+
+def _block_external_requests(route):
+    """Abort http(s) requests to non-local hosts so page load never hangs on external assets (gravatar /
+    CDNs) on a no-internet host. Local-site (localhost) and non-http (data:/blob:/ws:) requests pass."""
+    parsed = urlparse(route.request.url)
+    if parsed.scheme not in ("http", "https") or (parsed.hostname or "") in ("localhost", "127.0.0.1", "::1"):
+        route.continue_()
+    else:
+        route.abort()
+
 
 DATASET = os.environ["DATASET"]
 if DATASET == "visualwebarena":
@@ -188,6 +199,8 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
             geolocation=geolocation,
             device_scale_factor=1,
         )
+        # No-internet host: drop external requests so page.goto's "load" doesn't hang on gravatar/CDNs.
+        self.context.route("**/*", _block_external_requests)
         if self.save_trace_enabled:
             self.context.tracing.start(screenshots=True, snapshots=True)
 

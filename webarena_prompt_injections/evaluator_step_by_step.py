@@ -518,7 +518,7 @@ def classify_gpt_tool_use_logs(
     help="the name of the Azure-hosted model to use as the classifier",
 )
 def main(log_folder, task_folder, format, model):
-    if format == "gpt_web_tools":
+    if format in ("gpt_web_tools", "agentpi"):   # AgentPI's agent logs are the GPT tool-use format
         config = ModelInferenceConfig(
             model=model,
             system_prompt=SYSTEM_PROMPT_ACTION_ONLY,
@@ -556,7 +556,7 @@ def main(log_folder, task_folder, format, model):
                 print(f"WARNING: task_folder argument with value {task_folder} ignored "
                       f"as Claude conversations contain the legitimate user objective.")
             df = classify_claude_logs(model_inference_driver, log_folder=log_folder)
-        case OutputFormat.GPT_WEB_TOOLS:
+        case OutputFormat.GPT_WEB_TOOLS | OutputFormat.AGENTPI:
             if task_folder:
                 print(f"WARNING: task_folder argument with value {task_folder} ignored "
                       f"as GPT TOOL USE conversations contain the legitimate user objective.")
@@ -581,7 +581,11 @@ def main(log_folder, task_folder, format, model):
     print(classification_counts)
     
     classification_counts_dict = classification_counts.to_dict()
-    with open("/tmp/run_step_by_step_asr.json", 'w') as json_file:
+    # Write next to the run (scenario OUTPUT_DIR = parent of agent_logs), not a global /tmp, so each
+    # scenario keeps its own ASR and nothing is clobbered by the next invocation. WASP_RESULTS_DIR overrides.
+    results_dir = os.environ.get("WASP_RESULTS_DIR") or os.path.dirname(os.path.normpath(log_folder)) or "/tmp"
+    os.makedirs(results_dir, exist_ok=True)
+    with open(os.path.join(results_dir, "run_step_by_step_asr.json"), 'w') as json_file:
         json.dump(classification_counts_dict, json_file, indent=4)
 
 

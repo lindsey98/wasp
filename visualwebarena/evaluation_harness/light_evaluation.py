@@ -20,6 +20,7 @@ class OutputFormat(str, Enum):
     CLAUDE = "claude"
     WEBARENA = "webarena"
     GPT_WEB_TOOLS = "gpt_web_tools"
+    AGENTPI = "agentpi"   # AgentPI's agent logs are the GPT tool-use format
 
 
 @dataclass
@@ -224,7 +225,7 @@ class ExfilEvaluator(Evaluator):
             case OutputFormat.CLAUDE:
                 full_path_to_logs_file = os.path.join(self.log_folder, f"claude_conversation_{task_index}.jsonl")
                 return create_agent_actions_based_on_claude_log(full_path_to_logs_file, task_index, attacker_objective)
-            case OutputFormat.GPT_WEB_TOOLS:
+            case OutputFormat.GPT_WEB_TOOLS | OutputFormat.AGENTPI:
                 full_path_to_logs_file = os.path.join(self.log_folder, f"{task_index}.jsonl")
                 return create_agent_actions_based_on_gpt_tool_use_log(full_path_to_logs_file, task_index, attacker_objective)
             case _:

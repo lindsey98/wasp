@@ -1405,11 +1405,23 @@ def execute_action(
             raise ValueError(f"Unknown action type: {action_type}")
 
     page.wait_for_timeout(int(sleep_after_execution * 1000))
+    # A target=_blank click opens a new tab ASYNCHRONOUSLY. With sleep_after_execution=0 the tab-count
+    # check below ran before the popup attached, so the new tab was missed and the agent stayed on the old
+    # page (the navigation looked like it did nothing). Give a popup a bounded chance to attach first.
+    if len(browser_ctx.pages) == num_tabs_before:
+        try:
+            browser_ctx.wait_for_event("page", timeout=1500)
+        except Exception:
+            pass
     num_tabs_now = len(browser_ctx.pages)
-    # if a new tab is opened by clicking, switch to the new tab
+    # if a new tab is opened by clicking, switch to (and finish loading) the new tab, as a user would
     if num_tabs_now > num_tabs_before:
         page = browser_ctx.pages[-1]
         page.bring_to_front()
+        try:
+            page.wait_for_load_state("load", timeout=5000)
+        except Exception:
+            pass
 
     return page
 

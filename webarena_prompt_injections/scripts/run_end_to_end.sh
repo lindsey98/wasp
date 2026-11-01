@@ -18,26 +18,25 @@ if [[ "${OUTPUT_DIR}" != */ ]]; then
 fi
 
 if [ -d "$OUTPUT_DIR" ]; then
-  echo "Deleting existing OUTPUT_DIR=${OUTPUT_DIR}"
-  rm -rf "$OUTPUT_DIR"
+  if [ "${AGENTPI_FORCE_CLEAN:-0}" = "1" ]; then
+    echo "Deleting existing OUTPUT_DIR=${OUTPUT_DIR}"
+    rm -rf "$OUTPUT_DIR"
+  else
+    # Per-task resume: wipe everything EXCEPT agent_logs, so non-empty task logs can be reused and only
+    # the empty (failed) tasks get re-run. Set AGENTPI_FORCE_CLEAN=1 to force a fully clean re-run.
+    echo "Resetting OUTPUT_DIR but preserving agent_logs for per-task resume: ${OUTPUT_DIR}"
+    find "$OUTPUT_DIR" -mindepth 1 -maxdepth 1 ! -name agent_logs -exec rm -rf {} +
+  fi
 fi
 
 echo "Creating the new OUTPUT_DIR=${OUTPUT_DIR}"
-mkdir "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR" "$OUTPUT_DIR/agent_logs"
 
-# ----- cleanup after previous run
-if [ -f "/tmp/run_step_by_step_asr.json" ]; then
-  rm "/tmp/run_step_by_step_asr.json"
-fi
-
-if [ -f "/tmp/run_attacker_utility.json" ]; then
-  rm "/tmp/run_attacker_utility.json"
-fi
-
-if [ -f "/tmp/run_user_utility.json" ]; then
-  rm "/tmp/run_user_utility.json"
-fi
-# -----
+# Evaluators (step 3) write run_*.json here instead of a global /tmp, so each scenario keeps its own
+# scores next to its agent_logs and nothing is clobbered by the next invocation. Honor an inherited value
+# (the AgentPI pipeline sets it), else default to this run's OUTPUT_DIR. The OUTPUT_DIR reset above already
+# cleared any previous run_*.json at its root, so no separate cleanup is needed.
+export WASP_RESULTS_DIR="${WASP_RESULTS_DIR:-$OUTPUT_DIR}"
 
 echo "OUTPUT_DIR: $OUTPUT_DIR"
 echo "CONFIG_PATH: $CONFIG_PATH"
@@ -91,36 +90,36 @@ TASK_DIR="${OUTPUT_DIR}webarena_tasks/"
 ATTACKER_TASK_DIR="${OUTPUT_DIR}webarena_tasks_attacker/"
 echo "step 3 | OUTPUT_DIR: $OUTPUT_DIR"
 echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
-
-# first report ASR
-source venv/bin/activate
-python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
-echo "Done evaluating attack goals step-by-step, above score is ASR!"
-deactivate
-
-# next report user task success rate
-cd ../visualwebarena/
-source venv/bin/activate
-bash prepare.sh
-# evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT
-echo "Done evaluating attacker goals, above score is ASR!"
-# evaluate user task performance
-python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR
-echo "Done evaluating user objectives!"
-deactivate
-# bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
-##### -----------
-
-
-##### STEP 4: Cleanup environment ######
-echo "SCRIPT_DIR: $SCRIPT_DIR"
-cd $SCRIPT_DIR/..
-PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json"
-echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
-echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
-source venv/bin/activate
-python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT
-deactivate
-# bash step4_cleanup.sh $OUTPUT_DIR
-##### -----------
+#
+## first report ASR
+#source venv/bin/activate
+#python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
+#echo "Done evaluating attack goals step-by-step, above score is ASR!"
+#deactivate
+#
+## next report user task success rate
+#cd ../visualwebarena/
+#source venv/bin/activate
+#bash prepare.sh
+## evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
+#python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT
+#echo "Done evaluating attacker goals, above score is ASR!"
+## evaluate user task performance
+#python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
+#echo "Done evaluating user objectives!"
+#deactivate
+## bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
+###### -----------
+#
+#
+###### STEP 4: Cleanup environment ######
+#echo "SCRIPT_DIR: $SCRIPT_DIR"
+#cd $SCRIPT_DIR/..
+#PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json"
+#echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
+#echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
+#source venv/bin/activate
+#python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT
+#deactivate
+## bash step4_cleanup.sh $OUTPUT_DIR
+###### -----------
