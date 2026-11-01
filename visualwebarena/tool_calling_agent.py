@@ -217,7 +217,7 @@ def _api_safe_messages(messages: list[dict]) -> list[dict]:
         role = m.get("role")
         if role == "assistant":
             tcs = [tc for tc in (m.get("tool_calls") or []) if tc.get("id") in responded]
-            nm = {k: v for k, v in m.items() if k != "tool_calls"}
+            nm = {k: v for k, v in m.items() if k not in ("tool_calls", "reasoning_content")}
             if tcs:
                 nm["tool_calls"] = tcs
                 kept_ids.update(tc.get("id") for tc in tcs)
@@ -305,6 +305,14 @@ def _parse_response_to_json(response_message):
         "content": response_message.content,
         "tool_calls": [],
     }
+
+    # Reasoning models served by vLLM (Qwen3 etc.) return their thinking in a separate field, not in
+    # `content`; keep it in the trace log. `_api_safe_messages` strips it before the history is resent.
+    extra = getattr(response_message, "model_extra", None) or {}
+    reasoning = getattr(response_message, "reasoning_content", None) or extra.get("reasoning_content") \
+        or getattr(response_message, "reasoning", None) or extra.get("reasoning")
+    if reasoning:
+        parsed_message["reasoning_content"] = reasoning
 
     if response_message.tool_calls:
         parsed_message["tool_calls"] = [
