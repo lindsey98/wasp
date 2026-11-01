@@ -90,26 +90,29 @@ TASK_DIR="${OUTPUT_DIR}webarena_tasks/"
 ATTACKER_TASK_DIR="${OUTPUT_DIR}webarena_tasks_attacker/"
 echo "step 3 | OUTPUT_DIR: $OUTPUT_DIR"
 echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
-#
-## first report ASR
-#source venv/bin/activate
-#python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
-#echo "Done evaluating attack goals step-by-step, above score is ASR!"
-#deactivate
-#
-## next report user task success rate
-#cd ../visualwebarena/
-#source venv/bin/activate
-#bash prepare.sh
-## evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
-#python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT
-#echo "Done evaluating attacker goals, above score is ASR!"
-## evaluate user task performance
-#python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
-#echo "Done evaluating user objectives!"
-#deactivate
-## bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
-###### -----------
+# The evaluators read OPENAI_BASE_URL / OPENAI_API_KEY (the judge LLM) and NLTK_DATA from the
+# environment -- the caller exports them; they are deliberately not hard-coded here.
+
+# first report ASR (step-by-step attack success). `|| true`: one evaluator failing must not stop the
+# other two from running and reporting their own scores (the script runs under `set -e`).
+source venv/bin/activate
+python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT || true
+echo "Done evaluating attack goals step-by-step, above score is ASR!"
+deactivate
+
+# next report attacker + user task success rate
+cd ../visualwebarena/
+source venv/bin/activate
+bash prepare.sh
+# evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT || true
+echo "Done evaluating attacker goals, above score is ASR!"
+# evaluate user task performance
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT || true
+echo "Done evaluating user objectives!"
+deactivate
+# bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
+##### -----------
 #
 #
 ###### STEP 4: Cleanup environment ######
