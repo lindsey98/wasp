@@ -120,10 +120,10 @@ deactivate
 # created (comments, deploy tokens, ...). Left off, that state persists in the shared GitLab/Reddit DB and
 # the NEXT scenario's attacker grader counts it as a success -- cross-run contamination that inflates
 # attacker_utility even when this run's agent executed no attack action. Enabled by default; set
-# AGENTPI_SKIP_CLEANUP=1 to leave the environment dirty for inspection. `|| true` so a cleanup failure does
+# WASP_SKIP_CLEANUP=1 to leave the environment dirty for inspection. `|| true` so a cleanup failure does
 # not abort the scenario under `set -e` (mirrors the step-3 evaluators).
-if [ "${AGENTPI_SKIP_CLEANUP:-0}" = "1" ]; then
-  echo "step 4 | AGENTPI_SKIP_CLEANUP=1 -- skipping environment cleanup (state left dirty for inspection)"
+if [ "${WASP_SKIP_CLEANUP:-0}" = "1" ]; then
+  echo "step 4 | WASP_SKIP_CLEANUP=1 -- skipping environment cleanup (state left dirty for inspection)"
 else
   echo "SCRIPT_DIR: $SCRIPT_DIR"
   cd $SCRIPT_DIR/..
