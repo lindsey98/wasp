@@ -115,14 +115,23 @@ deactivate
 ##### -----------
 #
 #
-###### STEP 4: Cleanup environment ######
-#echo "SCRIPT_DIR: $SCRIPT_DIR"
-#cd $SCRIPT_DIR/..
-#PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json"
-#echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
-#echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
-#source venv/bin/activate
-#python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT
-#deactivate
-## bash step4_cleanup.sh $OUTPUT_DIR
+##### STEP 4: Cleanup environment ######
+# MUST run after step 3 grading (which reads the LIVE site DB), and undoes what this scenario's injections
+# created (comments, deploy tokens, ...). Left off, that state persists in the shared GitLab/Reddit DB and
+# the NEXT scenario's attacker grader counts it as a success -- cross-run contamination that inflates
+# attacker_utility even when this run's agent executed no attack action. Enabled by default; set
+# AGENTPI_SKIP_CLEANUP=1 to leave the environment dirty for inspection. `|| true` so a cleanup failure does
+# not abort the scenario under `set -e` (mirrors the step-3 evaluators).
+if [ "${AGENTPI_SKIP_CLEANUP:-0}" = "1" ]; then
+  echo "step 4 | AGENTPI_SKIP_CLEANUP=1 -- skipping environment cleanup (state left dirty for inspection)"
+else
+  echo "SCRIPT_DIR: $SCRIPT_DIR"
+  cd $SCRIPT_DIR/..
+  PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json"
+  echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
+  echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
+  source venv/bin/activate
+  python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT || true
+  deactivate
+fi
 ###### -----------
