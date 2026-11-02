@@ -231,12 +231,12 @@ WEB_TOOLS_DEFINITION = tools = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "id": {
+                    "element_id": {
                         "type": "string",
                         "description": "The ID of the element to hover over.",
                     }
                 },
-                "required": ["id"],
+                "required": ["element_id"],
                 "additionalProperties": False,
             },
             "strict": True,

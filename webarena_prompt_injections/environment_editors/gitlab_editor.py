@@ -101,45 +101,62 @@ class GitlabEditor(BaseWebArenaEditor):
         url_of_action = (
             f"{self.gitlab_domain}/{project_owner}/{project_name}/-/issues/new"
         )
-        self.page.goto(url_of_action, wait_until="load")
-
-        # DEBUG: dump the issue page so a missing #issue_title can be diagnosed (remove once working).
-        try:
-            self.page.wait_for_timeout(1500)
-            self._safe_screenshot(f"{LOG_DIR}/debug_issue_new.png")
-            with open(f"{LOG_DIR}/debug_issue_new.html", "w") as _f:
-                _f.write(self.page.content())
-        except Exception:
-            pass
-
-        self.page.fill(
-            "#issue_title",
-            title_to_type_in,
-        )
-        self.page.fill("textarea#issue_description", text_of_issue)
-
-        try:
-            with self.page.expect_navigation():
-                self.page.click('button:has-text("Create issue")')
-        except TimeoutError:
-            screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_login.png"
-            self._safe_screenshot(screenshot_path)
-            raise WebArenaEditorException(
-                f"Failed to create issue at {url_of_action}. Screenshot at {screenshot_path}"
-            )
-
         issue_created_url_pattern = rf".*{project_owner}/{project_name}/-/issues/\d+$"
 
-        if re.match(issue_created_url_pattern, self.page.url):
-            return self.page.url
-        else:
-            screenshot_path = (
-                f"{LOG_DIR}/debug_gitlabeditor_issue_creation_with_title_and_text.png"
-            )
-            self._safe_screenshot(screenshot_path)
-            raise WebArenaEditorException(
-                f"Issue creation likely failed. Did not end up at an expected URL; instead at {self.page.url}. Screenshot for debugging at {screenshot_path}"
-            )
+        # GitLab answers a rejected create by re-rendering the form at .../-/issues (no number). One cause is
+        # filling the form before its JS has hydrated, which can reset the fields; so wait for the page to
+        # settle, check the title survived, and retry once before giving up with GitLab's own error text.
+        errors = ""
+        for attempt in range(2):
+            self.page.goto(url_of_action, wait_until="load")
+            try:
+                self.page.wait_for_load_state("networkidle", timeout=10000)
+            except TimeoutError:
+                pass
+
+            self.page.fill("#issue_title", title_to_type_in)
+            self.page.fill("textarea#issue_description", text_of_issue)
+            if self.page.input_value("#issue_title") != title_to_type_in:
+                self.page.wait_for_timeout(1000)
+                self.page.fill("#issue_title", title_to_type_in)
+
+            try:
+                with self.page.expect_navigation():
+                    self.page.click('button:has-text("Create issue")')
+            except TimeoutError:
+                screenshot_path = f"{LOG_DIR}/debug_gitlabeditor_login.png"
+                self._safe_screenshot(screenshot_path)
+                raise WebArenaEditorException(
+                    f"Failed to create issue at {url_of_action}. Screenshot at {screenshot_path}"
+                )
+
+            if re.match(issue_created_url_pattern, self.page.url):
+                return self.page.url
+
+            errors = self._page_error_text()
+            print(f"Issue creation attempt {attempt + 1} rejected at {self.page.url}: {errors or 'no error shown'}")
+
+        screenshot_path = (
+            f"{LOG_DIR}/debug_gitlabeditor_issue_creation_with_title_and_text.png"
+        )
+        self._safe_screenshot(screenshot_path)
+        raise WebArenaEditorException(
+            f"Issue creation likely failed. Did not end up at an expected URL; instead at {self.page.url}. "
+            f"GitLab said: {errors or '(no error shown)'}. Screenshot for debugging at {screenshot_path}"
+        )
+
+    def _page_error_text(self) -> str:
+        """The validation/flash error GitLab rendered on the current page, if any."""
+        for selector in ("#error_explanation", ".gl-alert-danger", ".flash-alert", ".gl-alert"):
+            try:
+                el = self.page.query_selector(selector)
+                if el is not None:
+                    text = " ".join(el.inner_text().split())
+                    if text:
+                        return text[:500]
+            except Exception:
+                continue
+        return ""
 
     def delete_issue_given_url(
         self,

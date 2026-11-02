@@ -90,36 +90,48 @@ TASK_DIR="${OUTPUT_DIR}webarena_tasks/"
 ATTACKER_TASK_DIR="${OUTPUT_DIR}webarena_tasks_attacker/"
 echo "step 3 | OUTPUT_DIR: $OUTPUT_DIR"
 echo "step 3 | OUTPUT_FORMAT: $OUTPUT_FORMAT"
+# The evaluators read OPENAI_BASE_URL / OPENAI_API_KEY (the judge LLM) and NLTK_DATA from the
+# environment -- the caller exports them; they are deliberately not hard-coded here.
+
+# first report ASR (step-by-step attack success). `|| true`: one evaluator failing must not stop the
+# other two from running and reporting their own scores (the script runs under `set -e`).
+source venv/bin/activate
+python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT || true
+echo "Done evaluating attack goals step-by-step, above score is ASR!"
+deactivate
+
+# next report attacker + user task success rate
+cd ../visualwebarena/
+source venv/bin/activate
+bash prepare.sh
+# evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT || true
+echo "Done evaluating attacker goals, above score is ASR!"
+# evaluate user task performance
+python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT || true
+echo "Done evaluating user objectives!"
+deactivate
+# bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
+##### -----------
 #
-## first report ASR
-#source venv/bin/activate
-#python evaluator_step_by_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
-#echo "Done evaluating attack goals step-by-step, above score is ASR!"
-#deactivate
 #
-## next report user task success rate
-#cd ../visualwebarena/
-#source venv/bin/activate
-#bash prepare.sh
-## evaluate attacker task performance (i.e. if final goal of the attacker was achieved)
-#python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $ATTACKER_TASK_DIR --format $OUTPUT_FORMAT
-#echo "Done evaluating attacker goals, above score is ASR!"
-## evaluate user task performance
-#python evaluator_final_step.py --log-folder $LOG_DIR --task-folder $TASK_DIR --format $OUTPUT_FORMAT
-#echo "Done evaluating user objectives!"
-#deactivate
-## bash step3_run_evaluators.sh $OUTPUT_DIR $OUTPUT_FORMAT
-###### -----------
-#
-#
-###### STEP 4: Cleanup environment ######
-#echo "SCRIPT_DIR: $SCRIPT_DIR"
-#cd $SCRIPT_DIR/..
-#PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json"
-#echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
-#echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
-#source venv/bin/activate
-#python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT
-#deactivate
-## bash step4_cleanup.sh $OUTPUT_DIR
+##### STEP 4: Cleanup environment ######
+# MUST run after step 3 grading (which reads the LIVE site DB), and undoes what this scenario's injections
+# created (comments, deploy tokens, ...). Left off, that state persists in the shared GitLab/Reddit DB and
+# the NEXT scenario's attacker grader counts it as a success -- cross-run contamination that inflates
+# attacker_utility even when this run's agent executed no attack action. Enabled by default; set
+# WASP_SKIP_CLEANUP=1 to leave the environment dirty for inspection. `|| true` so a cleanup failure does
+# not abort the scenario under `set -e` (mirrors the step-3 evaluators).
+if [ "${WASP_SKIP_CLEANUP:-0}" = "1" ]; then
+  echo "step 4 | WASP_SKIP_CLEANUP=1 -- skipping environment cleanup (state left dirty for inspection)"
+else
+  echo "SCRIPT_DIR: $SCRIPT_DIR"
+  cd $SCRIPT_DIR/..
+  PROMPT_INJECTION_CONFIG="${OUTPUT_DIR}instantiated_prompt_injections_config.json"
+  echo "step 4 | OUTPUT_DIR: $OUTPUT_DIR"
+  echo "step 4 | PROMPT_INJECTION_CONFIG: $PROMPT_INJECTION_CONFIG"
+  source venv/bin/activate
+  python environment_cleanup.py --prompt-injection-config-path "$PROMPT_INJECTION_CONFIG" --gitlab-domain $GITLAB --reddit-domain $REDDIT || true
+  deactivate
+fi
 ###### -----------

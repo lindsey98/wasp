@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import re
@@ -27,11 +28,17 @@ from playwright.sync_api import (
 def _block_external_requests(route):
     """Abort http(s) requests to non-local hosts so page load never hangs on external assets (gravatar /
     CDNs) on a no-internet host. Local-site (localhost) and non-http (data:/blob:/ws:) requests pass."""
-    parsed = urlparse(route.request.url)
-    if parsed.scheme not in ("http", "https") or (parsed.hostname or "") in ("localhost", "127.0.0.1", "::1"):
-        route.continue_()
-    else:
-        route.abort()
+    try:
+        parsed = urlparse(route.request.url)
+        if parsed.scheme not in ("http", "https") or (parsed.hostname or "") in ("localhost", "127.0.0.1", "::1"):
+            route.continue_()
+        else:
+            route.abort()
+    except (asyncio.CancelledError, Exception):
+        # The page/context can tear down (navigation or close) while this route is in flight; Playwright
+        # then cancels the continue_/abort call. The request is already gone -- swallow it instead of
+        # surfacing a noisy unhandled-callback traceback. (CancelledError is BaseException, not Exception.)
+        pass
 
 
 DATASET = os.environ["DATASET"]

@@ -109,6 +109,13 @@ class GPTWebAgent:
 
         args = json.loads(tool_call["function"]["arguments"])
 
+        # Weaker/local models often pass `id` (the name the hover schema itself used) where the
+        # action functions want `element_id`; normalise common aliases so a naming slip is not a
+        # hard failure. This tolerates the parameter NAME only, never the target element.
+        for alias in ("id", "element", "node_id"):
+            if alias in args and "element_id" not in args:
+                args["element_id"] = args.pop(alias)
+
         if tool_name == "stop":
             # Weaker/local models often call stop without the schema's `answer` arg -> default to "".
             return [{"role": "stop", "answer": args.get("answer", "")}]
@@ -148,6 +155,7 @@ URL: {self.browser_env.page.url}
         max_observations_to_keep: int,
     ):
         messages = []
+        self.messages = messages   # expose the live transcript so the guard dump can log it (AgentDojo parity)
         system_message = {"role": "system", "content": SYSTEM_PROMPT}
         messages.append(system_message)
 
@@ -165,6 +173,9 @@ URL: {self.browser_env.page.url}
                 f"Model [{self.model}] response {action_number} {model_response_message['content']}"
             )
 
+            # Expose the reasoning that led to this turn's tool call, so a guard can attach it to the gate
+            # step it records (AgentDojo logs the thought alongside each gated action).
+            self._last_reasoning = model_response_message.get("content") or ""
             result_of_execution = self._execute_requested_tool_calls(
                 model_response_message["tool_calls"]
             )
@@ -210,7 +221,7 @@ def _api_safe_messages(messages: list[dict]) -> list[dict]:
         role = m.get("role")
         if role == "assistant":
             tcs = [tc for tc in (m.get("tool_calls") or []) if tc.get("id") in responded]
-            nm = {k: v for k, v in m.items() if k != "tool_calls"}
+            nm = {k: v for k, v in m.items() if k not in ("tool_calls", "reasoning_content")}
             if tcs:
                 nm["tool_calls"] = tcs
                 kept_ids.update(tc.get("id") for tc in tcs)
@@ -298,6 +309,14 @@ def _parse_response_to_json(response_message):
         "content": response_message.content,
         "tool_calls": [],
     }
+
+    # Reasoning models served by vLLM (Qwen3 etc.) return their thinking in a separate field, not in
+    # `content`; keep it in the trace log. `_api_safe_messages` strips it before the history is resent.
+    extra = getattr(response_message, "model_extra", None) or {}
+    reasoning = getattr(response_message, "reasoning_content", None) or extra.get("reasoning_content") \
+        or getattr(response_message, "reasoning", None) or extra.get("reasoning")
+    if reasoning:
+        parsed_message["reasoning_content"] = reasoning
 
     if response_message.tool_calls:
         parsed_message["tool_calls"] = [
