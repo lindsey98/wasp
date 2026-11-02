@@ -110,7 +110,14 @@ python run.py --model gpt-4o-mini \
 
 ### Resetting environments
 
-Our scripts automatically cleans up environment after each run. However, sometimes manual reset is required. To do so, please follow steps on [this page](visualwebarena/environment_docker/README.md#environment-reset).
+Our scripts automatically cleans up environment after each run. However, sometimes manual reset is required. The one-shot way is to recreate both containers from their pristine images (polls until each site answers, applies the GitLab tuning in a single `reconfigure`):
+
+```bash
+bash webarena_prompt_injections/scripts/restart_envs.sh            # gitlab + reddit
+bash webarena_prompt_injections/scripts/restart_envs.sh gitlab     # or one of them
+```
+
+Set `GITLAB_HOST=<your-server-hostname>` if GitLab is reached by a name other than the image's `external_url`. For the manual steps see [this page](visualwebarena/environment_docker/README.md#environment-reset).
 
 ### How to test a new prompt injection attack?
 
