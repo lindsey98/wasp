@@ -155,6 +155,7 @@ URL: {self.browser_env.page.url}
         max_observations_to_keep: int,
     ):
         messages = []
+        self.messages = messages   # expose the live transcript so the guard dump can log it (AgentDojo parity)
         system_message = {"role": "system", "content": SYSTEM_PROMPT}
         messages.append(system_message)
 
@@ -172,6 +173,9 @@ URL: {self.browser_env.page.url}
                 f"Model [{self.model}] response {action_number} {model_response_message['content']}"
             )
 
+            # Expose the reasoning that led to this turn's tool call, so a guard can attach it to the gate
+            # step it records (AgentDojo logs the thought alongside each gated action).
+            self._last_reasoning = model_response_message.get("content") or ""
             result_of_execution = self._execute_requested_tool_calls(
                 model_response_message["tool_calls"]
             )

@@ -38,13 +38,22 @@ def _dump_guard(agent: OnlineWebAgent, trace_log_filepath: str = "") -> None:
     g = getattr(agent, "guard", None)
     try:
         # viz_steps are captured in BOTH modes (guarded and --use-original baseline), so the HTML trace
-        # exists even with no guard; the contract/gate fields are added only when a guard ran.
-        payload = {"viz_steps": getattr(agent, "viz_steps", [])}
+        # exists even with no guard; the contract/gate fields are added only when a guard ran. `messages`
+        # is the full system/user/assistant/tool transcript -- the assistant's reasoning and the tool
+        # messages (incl. each gate refusal) interleaved -- so the record has AgentDojo-level granularity.
+        payload = {"viz_steps": getattr(agent, "viz_steps", []),
+                   "messages": getattr(agent, "messages", [])}
         if g is not None:
             payload.update({
                 "query": g.query,
                 "status": g.status,
+                # The compiled obligation authored at t=0 from the request alone: BOTH halves -- the
+                # objectives (control-flow: what the run is for) and the per-argument preconditions
+                # (data-flow: the value each argument must take). Logged so the record shows the contract
+                # the gate actually enforced, not only its objective half.
                 "objectives": [o.model_dump() for o in g.aset.objectives],
+                "preconditions": [p.model_dump() for p in g.aset.preconditions],
+                "delegation": g.delegation,
                 "gate_log": g.gate_log,
                 "steps": g.steps,
                 "tainted": g.tainted,
@@ -52,14 +61,14 @@ def _dump_guard(agent: OnlineWebAgent, trace_log_filepath: str = "") -> None:
         # Single dump (last task wins) -- what the AgentPI pipeline folds into the scenario record.
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
+            json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
         # Per-task dump under guards/<task_id>.json, so every one of the scenario's ~21 tasks keeps its own
         # trace (the single dump above is overwritten each task). report_html_wasp --batch renders them all.
         task_id = os.path.splitext(os.path.basename(trace_log_filepath or ""))[0] or "task"
         per = os.path.join(os.path.dirname(path), "guards", f"{task_id}.json")
         os.makedirs(os.path.dirname(per), exist_ok=True)
         with open(per, "w") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
+            json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
     except Exception as e:  # noqa: BLE001 -- a dump failure must not fail the run; the scores still land
         print(f"run_agentpi: could not write guard dump ({e})")
 
