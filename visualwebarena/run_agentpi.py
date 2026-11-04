@@ -1,13 +1,13 @@
 # The AgentPI online-method runner for WASP: the GPT tool-calling web agent (tool_calling_agent.GPTWebAgent)
-# wrapped in AgentPI's contract/gate/reader, via agentpi.benchmarks.wasp.agent.OnlineWebAgent.
+# wrapped in AgentPI's requirement/harness/reader, via agentpi.benchmarks.wasp.agent.OnlineWebAgent.
 #
 # Drop-in for tool_calling_agent.py in WASP step 2 (prompt_injector writes a run_agent.sh that calls this
 # when --output-format agentpi). Same CLI as tool_calling_agent.py; the AgentPI-specific knobs arrive through
 # AGENTPI_* env vars set by the AgentPI pipeline:
 #   AGENTPI_AGENT_MODEL / AGENTPI_Q_MODEL / AGENTPI_C_MODEL / AGENTPI_J_MODEL  -- the four role models
 #   AGENTPI_USE_ORIGINAL = 0|1   -- 1 runs the bare GPTWebAgent (no defense) baseline
-#   AGENTPI_CONTRACT_FILE        -- cache path for the t=0 contract (omit to re-author)
-#   AGENTPI_GUARD_DUMP           -- where to dump the gate trail + contract for the AgentPI record
+#   AGENTPI_CONTRACT_FILE        -- cache path for the t=0 requirement (omit to re-author)
+#   AGENTPI_GUARD_DUMP           -- where to dump the harness record (requirement, steps, provenance)
 #
 # Requires agentpi importable in THIS (visualwebarena) venv:  uv pip install -e <path-to-AgentPI>
 import json
@@ -19,16 +19,16 @@ import click
 
 from browser_env.auto_login import get_site_comb_from_filepath
 
-from agentpi.core.online import Models
+from agentpi.core.requirement.model import Models
 from agentpi.benchmarks.wasp.agent import OnlineWebAgent
 
 
 def _models() -> Models:
     agent = os.environ.get("AGENTPI_AGENT_MODEL") or os.environ.get("MODEL", "gpt-4o")
     reader = os.environ.get("AGENTPI_Q_MODEL", agent)
-    contract = os.environ.get("AGENTPI_C_MODEL", agent)
+    compiler = os.environ.get("AGENTPI_C_MODEL", agent)
     judge = os.environ.get("AGENTPI_J_MODEL", agent)
-    return Models(agent, reader, contract, judge)
+    return Models(agent, reader, compiler, judge)
 
 
 def _dump_guard(agent: OnlineWebAgent, trace_log_filepath: str = "") -> None:
@@ -38,32 +38,21 @@ def _dump_guard(agent: OnlineWebAgent, trace_log_filepath: str = "") -> None:
     g = getattr(agent, "guard", None)
     try:
         # viz_steps are captured in BOTH modes (guarded and --use-original baseline), so the HTML trace
-        # exists even with no guard; the contract/gate fields are added only when a guard ran. `messages`
-        # is the full system/user/assistant/tool transcript -- the assistant's reasoning and the tool
-        # messages (incl. each gate refusal) interleaved -- so the record has AgentDojo-level granularity.
+        # exists even with no guard; the harness record is added only when a guard ran. `messages` is the
+        # full system/user/assistant/tool transcript -- the assistant's reasoning and the tool messages
+        # (incl. each harness refusal) interleaved -- so the record has AgentDojo-level granularity.
         payload = {"viz_steps": getattr(agent, "viz_steps", []),
                    "messages": getattr(agent, "messages", [])}
         if g is not None:
-            payload.update({
-                "query": g.query,
-                "status": g.status,
-                # The compiled obligation authored at t=0 from the request alone: BOTH halves -- the
-                # objectives (control-flow: what the run is for) and the per-argument preconditions
-                # (data-flow: the value each argument must take). Logged so the record shows the contract
-                # the gate actually enforced, not only its objective half.
-                "objectives": [o.model_dump() for o in g.aset.objectives],
-                "preconditions": [p.model_dump() for p in g.aset.preconditions],
-                "delegation": g.delegation,
-                "gate_log": g.gate_log,
-                "steps": g.steps,
-                "tainted": g.tainted,
-            })
+            # query, status, objectives, preconditions, delegation, tainted, and the full provenance
+            # (steps, harness decisions, requirement and memory over time) -- what the AgentPI record reads.
+            payload.update(g.record())
         # Single dump (last task wins) -- what the AgentPI pipeline folds into the scenario record.
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
         # Per-task dump under guards/<task_id>.json, so every one of the scenario's ~21 tasks keeps its own
-        # trace (the single dump above is overwritten each task). report_html_wasp --batch renders them all.
+        # trace (the single dump above is overwritten each task). agentpi.benchmarks.wasp.report --batch renders them all.
         task_id = os.path.splitext(os.path.basename(trace_log_filepath or ""))[0] or "task"
         per = os.path.join(os.path.dirname(path), "guards", f"{task_id}.json")
         os.makedirs(os.path.dirname(per), exist_ok=True)
@@ -109,7 +98,7 @@ def main(webarena_config_path, model, trace_log_filepath, max_actions, max_obser
                 print("Ignore this failure since agent has credentials in the system_prompt")
 
     use_original = os.environ.get("AGENTPI_USE_ORIGINAL", "0") == "1"
-    contract_file = os.environ.get("AGENTPI_CONTRACT_FILE") or None
+    requirement_file = os.environ.get("AGENTPI_CONTRACT_FILE") or None
     max_actions = max_actions or int(os.environ.get("AGENTPI_MAX_STEPS", "20"))
 
     # Let the agent's action LLM use its OWN endpoint, separate from OPENAI_BASE_URL. WASP's step-1 injector
@@ -127,7 +116,7 @@ def main(webarena_config_path, model, trace_log_filepath, max_actions, max_obser
     agent_model = (os.environ.get("AGENTPI_AGENT_MODEL") or model).split(":", 1)[-1]
     # taint_source stays None by default: sanitize (reported speech) + objective-admission are the active
     # defenses; a precise injected-span detector can be wired here later (the plan's tunable knob).
-    with OnlineWebAgent(agent_model, trace_log_filepath, _models(), contract_file=contract_file,
+    with OnlineWebAgent(agent_model, trace_log_filepath, _models(), requirement_file=requirement_file,
                         use_original=use_original, taint_source=None) as agent:
         agent.loop(start_url=start_url, user_objective=user_objective, max_actions=max_actions,
                    max_observations_to_keep=max_observations_to_keep)
