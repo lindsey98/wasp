@@ -8,6 +8,8 @@
 #   AGENTPI_USE_ORIGINAL = 0|1   -- 1 runs the bare GPTWebAgent (no defense) baseline
 #   AGENTPI_CONTRACT_FILE        -- cache path for the t=0 requirement (omit to re-author)
 #   AGENTPI_GUARD_DUMP           -- where to dump the harness record (requirement, steps, provenance)
+#   AGENTPI_AGENT_BASE_URL / AGENTPI_AGENT_API_KEY -- the agent model's OWN endpoint (e.g. a local vLLM);
+#                                   OPENAI_* keep serving gpt-4o for the harness's api: models
 #
 # Requires agentpi importable in THIS (visualwebarena) venv:  uv pip install -e <path-to-AgentPI>
 import json
@@ -16,6 +18,7 @@ import subprocess
 import tempfile
 
 import click
+from openai import OpenAI
 
 from browser_env.auto_login import get_site_comb_from_filepath
 
@@ -100,23 +103,28 @@ def main(webarena_config_path, model, trace_log_filepath, max_actions, max_obser
     requirement_file = os.environ.get("AGENTPI_CONTRACT_FILE") or None
     max_actions = max_actions or int(os.environ.get("AGENTPI_MAX_STEPS", "20"))
 
-    # Let the agent's action LLM use its OWN endpoint, separate from OPENAI_BASE_URL. WASP's step-1 injector
-    # and step-3 evaluators call gpt-4o via OPENAI_BASE_URL (a hosted gateway); the agent model (e.g. a local
-    # vLLM serving Qwen) usually lives elsewhere and that gateway has no channel for it. Each WASP step is a
-    # separate process, so overriding OPENAI_BASE_URL here only affects this step-2 agent process.
-    if os.environ.get("AGENTPI_AGENT_BASE_URL"):
-        os.environ["OPENAI_BASE_URL"] = os.environ["AGENTPI_AGENT_BASE_URL"]
-    if os.environ.get("AGENTPI_AGENT_API_KEY"):
-        os.environ["OPENAI_API_KEY"] = os.environ["AGENTPI_AGENT_API_KEY"]
     # The agent's OWN action LLM is the REAL agent model (AGENTPI_AGENT_MODEL), bare served name -- NOT the
     # --model arg, which carries only the injector's Choice-valid placeholder (e.g. gpt-4o) and would
-    # otherwise silently run the agent on the wrong model. Its OpenAI client routes via OPENAI_BASE_URL /
-    # OPENAI_API_KEY, so point those at your vLLM for a local agent (local:/api: prefix is stripped here).
+    # otherwise silently run the agent on the wrong model (local:/api: prefix is stripped here).
     agent_model = (os.environ.get("AGENTPI_AGENT_MODEL") or model).split(":", 1)[-1]
+    # Endpoints. OPENAI_BASE_URL / OPENAI_API_KEY stay what the launcher set: they serve gpt-4o for WASP's
+    # injector and evaluators AND, in this very process, for the harness's `api:` models (compiler/reader
+    # resolve `api:` through OPENAI_BASE_URL). The agent model (e.g. a local vLLM serving Qwen) usually lives
+    # elsewhere, so it gets its OWN client from AGENTPI_AGENT_BASE_URL / AGENTPI_AGENT_API_KEY, swapped in
+    # below -- never by overwriting OPENAI_*, which would send the harness's gpt-4o calls to the vLLM too.
+    # GPTWebAgent.__init__ insists on a key in the env; any non-empty string satisfies an endpoint that does
+    # not check it, so fall back to the agent's key (or EMPTY) when no gateway key is set.
+    agent_base_url = os.environ.get("AGENTPI_AGENT_BASE_URL")
+    agent_api_key = os.environ.get("AGENTPI_AGENT_API_KEY")
+    if "OPENAI_API_KEY" not in os.environ and "AZURE_API_KEY" not in os.environ:
+        os.environ["OPENAI_API_KEY"] = agent_api_key or "EMPTY"
     # taint_source stays None by default: sanitize (reported speech) + objective-admission are the active
     # defenses; a precise injected-span detector can be wired here later (the plan's tunable knob).
     with OnlineWebAgent(agent_model, trace_log_filepath, _models(), requirement_file=requirement_file,
                         use_original=use_original, taint_source=None) as agent:
+        if agent_base_url or agent_api_key:
+            agent.client = OpenAI(base_url=agent_base_url or os.environ.get("OPENAI_BASE_URL"),
+                                  api_key=agent_api_key or os.environ.get("OPENAI_API_KEY", "EMPTY"))
         agent.loop(start_url=start_url, user_objective=user_objective, max_actions=max_actions,
                    max_observations_to_keep=max_observations_to_keep)
         _dump_guard(agent, trace_log_filepath)
