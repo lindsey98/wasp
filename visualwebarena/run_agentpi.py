@@ -4,7 +4,7 @@
 # Drop-in for tool_calling_agent.py in WASP step 2 (prompt_injector writes a run_agent.sh that calls this
 # when --output-format agentpi). Same CLI as tool_calling_agent.py; the AgentPI-specific knobs arrive through
 # AGENTPI_* env vars set by the AgentPI pipeline:
-#   AGENTPI_AGENT_MODEL / AGENTPI_Q_MODEL / AGENTPI_C_MODEL / AGENTPI_J_MODEL  -- the four role models
+#   AGENTPI_AGENT_MODEL / AGENTPI_Q_MODEL / AGENTPI_C_MODEL  -- the three role models
 #   AGENTPI_USE_ORIGINAL = 0|1   -- 1 runs the bare GPTWebAgent (no defense) baseline
 #   AGENTPI_CONTRACT_FILE        -- cache path for the t=0 requirement (omit to re-author)
 #   AGENTPI_GUARD_DUMP           -- where to dump the harness record (requirement, steps, provenance)
@@ -27,8 +27,7 @@ def _models() -> Models:
     agent = os.environ.get("AGENTPI_AGENT_MODEL") or os.environ.get("MODEL", "gpt-4o")
     reader = os.environ.get("AGENTPI_Q_MODEL", agent)
     compiler = os.environ.get("AGENTPI_C_MODEL", agent)
-    judge = os.environ.get("AGENTPI_J_MODEL", agent)
-    return Models(agent, reader, compiler, judge)
+    return Models(agent, reader, compiler)
 
 
 def _dump_guard(agent: OnlineWebAgent, trace_log_filepath: str = "") -> None:

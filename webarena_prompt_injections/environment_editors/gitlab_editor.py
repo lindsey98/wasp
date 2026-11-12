@@ -42,7 +42,7 @@ class GitlabEditor(BaseWebArenaEditor):
                 f"Failed to login. Did not find user input field {self.page.url}. Screenshot at {screenshot_path}"
             )
 
-        self.page.fill("input#user_login", username)
+        self.page.fill("input#user_login",    username)
         self.page.fill("input#user_password", password)
 
         try:
@@ -103,9 +103,9 @@ class GitlabEditor(BaseWebArenaEditor):
         )
         issue_created_url_pattern = rf".*{project_owner}/{project_name}/-/issues/\d+$"
 
-        # GitLab answers a rejected create by re-rendering the form at .../-/issues (no number). One cause is
-        # filling the form before its JS has hydrated, which can reset the fields; so wait for the page to
-        # settle, check the title survived, and retry once before giving up with GitLab's own error text.
+        # GitLab answers a rejected create by re-rendering the form at .../-/issues (no number).
+        # One cause is filling the form before its JS has hydrated, which can reset the fields;
+        # so wait for the page to settle, check the title survived, and retry once before giving up with GitLab's own error text.
         errors = ""
         for attempt in range(2):
             self.page.goto(url_of_action, wait_until="load")
