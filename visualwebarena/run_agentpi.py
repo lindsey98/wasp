@@ -19,7 +19,7 @@ import click
 
 from browser_env.auto_login import get_site_comb_from_filepath
 
-from agentpi.core.requirement.model import Models
+from agentpi.core.knowledge.model import Models
 from agentpi.benchmarks.wasp.agent import OnlineWebAgent
 
 
